@@ -759,20 +759,21 @@ def get_news(symbol):
             return jsonify([])
 
         if not company_name:
-            info = {}
             try:
                 info = tkr.info or {}
+                company_name = info.get("longName") or info.get("shortName") or ""
             except Exception:
-                info = {}
-            company_name = info.get("longName") or info.get("shortName") or ""
+                company_name = ""
 
+        stop_words = {'ltd', 'inc', 'corp', 'plc', 'nv', 'ag', 'limited', 'company', 'co', 'the', 'holdings', 'group'}
         keywords = [symbol.lower()]
         if company_name:
-            words = [w for w in company_name.split() if len(w) > 2 and w.lower() not in ['ltd', 'inc', 'corp', 'plc', 'nv', 'ag']]
-            if words:
-                keywords.append(words[0].lower())
+            words = [w.lower() for w in re.split(r'[^A-Za-z0-9]+', company_name) if 3 <= len(w) <= 20]
+            words = [w for w in words if w not in stop_words]
+            keywords.extend(words)
 
-        cleaned  = []
+        keywords = list(dict.fromkeys(keywords))
+        cleaned = []
         for n in raw_news[:30]:
             if "content" in n:
                 c       = n["content"]
@@ -787,9 +788,9 @@ def get_news(symbol):
                 pub     = n.get("providerPublishTime", "")
 
             full_text = (title + " " + summary).lower()
-            is_relevant = symbol.lower() in full_text
-            if not is_relevant and len(keywords) > 1:
-                is_relevant = (keywords[1] in full_text)
+            is_relevant = any(term in full_text for term in keywords)
+            if not is_relevant and company_name:
+                is_relevant = company_name.lower() in full_text
 
             if is_relevant and title and link:
                 sentiment = analyze_sentiment(title + " " + summary)

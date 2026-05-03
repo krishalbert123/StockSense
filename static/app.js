@@ -17,6 +17,7 @@ let selectedSymbols = {
 };
 
 const COLORS = { RNN: "#ff6b35", LSTM: "#7b2fff", GRU: "#00d4aa" };
+const searchTokens = {};
 
 /* ── INIT ──────────────────────────────────────────────── */
 document.addEventListener("DOMContentLoaded", () => {
@@ -85,6 +86,14 @@ async function loadStocks() {
    Usage: buildSearchSelect("my-wrap-id", "view", false)
    Last param: isWatchlistOnly (true = only show watchlist, false = show all stocks)
 ────────────────────────────────────────────────────────── */
+function debounce(fn, delay = 250) {
+    let timer;
+    return (...args) => {
+        clearTimeout(timer);
+        timer = setTimeout(() => fn(...args), delay);
+    };
+}
+
 function buildSearchSelect(wrapId, key, placeholder, isWatchlistOnly = true) {
     const wrap = document.getElementById(wrapId);
     if (!wrap) return;
@@ -102,13 +111,22 @@ function buildSearchSelect(wrapId, key, placeholder, isWatchlistOnly = true) {
     `;
     const input = document.getElementById(`ss-input-${key}`);
     const drop  = document.getElementById(`ss-drop-${key}`);
+    let currentRequestId = 0;
 
-    input.addEventListener("input", async () => {
+    const updateLiveDrop = debounce(async (query) => {
+        if (!drop.classList.contains("hidden")) {
+            searchTokens[key] = ++currentRequestId;
+            await renderDropdownFromAPI(key, query, searchTokens[key]);
+        }
+    }, 250);
+
+    input.addEventListener("input", () => {
         const q = input.value.trim().toLowerCase();
         if (isWatchlistOnly) {
             renderDropdown(key, q);
         } else {
-            await renderDropdownFromAPI(key, q);
+            drop.innerHTML = `<div class="ss-empty">Searching…</div>`;
+            updateLiveDrop(q);
         }
         drop.classList.remove("hidden");
     });
@@ -121,7 +139,8 @@ function buildSearchSelect(wrapId, key, placeholder, isWatchlistOnly = true) {
             if (!q) {
                 await loadPopularStocks(key);
             } else {
-                await renderDropdownFromAPI(key, q);
+                searchTokens[key] = ++currentRequestId;
+                await renderDropdownFromAPI(key, q, searchTokens[key]);
             }
         }
         drop.classList.remove("hidden");
@@ -152,10 +171,14 @@ async function loadPopularStocks(key) {
     }
 }
 
-async function renderDropdownFromAPI(key, query) {
+async function renderDropdownFromAPI(key, query, requestId) {
     const drop = document.getElementById(`ss-drop-${key}`);
     if (!drop) return;
-    
+
+    if (requestId && searchTokens[key] !== requestId) {
+        return;
+    }
+
     if (!query) {
         await loadPopularStocks(key);
         return;
@@ -163,8 +186,15 @@ async function renderDropdownFromAPI(key, query) {
 
     try {
         const res = await fetch(`/api/search-stocks?q=${encodeURIComponent(query)}`);
-        const results = await res.json();
-        
+        let results = await res.json();
+        if (!Array.isArray(results)) {
+            if (results && results.error) {
+                drop.innerHTML = `<div class="ss-empty">${results.error}</div>`;
+                return;
+            }
+            results = [];
+        }
+
         if (!results.length) {
             drop.innerHTML = `<div class="ss-empty">No stocks match "${query}"</div>`;
             return;

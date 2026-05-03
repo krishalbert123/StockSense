@@ -28,7 +28,7 @@
 html,
 body {
     height: 100%;
-    overflow: hidden
+    overflow: hidden;
 }
 
 body {
@@ -36,6 +36,14 @@ body {
     background: var(--bg);
     color: var(--text);
     display: flex;
+}
+
+body.auth-page {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    overflow: hidden;
 }
 
 /* ── NOISE ───────────────────────────────────────────────── */
