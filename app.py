@@ -749,30 +749,31 @@ def predict_stock(symbol):
 def get_news(symbol):
     symbol = symbol.upper()
     try:
-        # Get company info to filter relevant news
+        # Lookup company name locally first, otherwise fall back to yfinance ticker metadata
         companies = db_fetchall("SELECT symbol, name FROM companies WHERE symbol = %s", (symbol,))
-        if not companies:
-            return jsonify([])
-        
-        company_name = companies[0]["name"]
-        
+        company_name = companies[0]["name"] if companies else ""
+
         tkr      = yf.Ticker(symbol)
         raw_news = tkr.news
         if not raw_news:
             return jsonify([])
-        
-        # Create strict keyword matching - must match company's unique identifier
-        # Extract key terms from company name (e.g., "ICICI Bank Ltd" -> ["icici"])
+
+        if not company_name:
+            info = {}
+            try:
+                info = tkr.info or {}
+            except Exception:
+                info = {}
+            company_name = info.get("longName") or info.get("shortName") or ""
+
         keywords = [symbol.lower()]
-        
-        # Add the first significant word from company name (main company identifier)
         if company_name:
             words = [w for w in company_name.split() if len(w) > 2 and w.lower() not in ['ltd', 'inc', 'corp', 'plc', 'nv', 'ag']]
             if words:
                 keywords.append(words[0].lower())
-        
+
         cleaned  = []
-        for n in raw_news[:30]:  # Check more articles
+        for n in raw_news[:30]:
             if "content" in n:
                 c       = n["content"]
                 title   = c.get("title", "")
@@ -784,24 +785,25 @@ def get_news(symbol):
                 link    = n.get("link", "")
                 summary = n.get("summary", "")
                 pub     = n.get("providerPublishTime", "")
-            
-            # Strict filter: Title MUST contain symbol or company's primary name
+
             full_text = (title + " " + summary).lower()
-            
-            # Match symbol first (most reliable), then company primary word
-            is_relevant = (symbol.lower() in full_text)
+            is_relevant = symbol.lower() in full_text
             if not is_relevant and len(keywords) > 1:
                 is_relevant = (keywords[1] in full_text)
-            
+
             if is_relevant and title and link:
                 sentiment = analyze_sentiment(title + " " + summary)
-                cleaned.append({"title": title, "link": link,
-                                "summary": summary, "pubDate": str(pub),
-                                "sentiment": sentiment})
-            
+                cleaned.append({
+                    "title": title,
+                    "link": link,
+                    "summary": summary,
+                    "pubDate": str(pub),
+                    "sentiment": sentiment
+                })
+
             if len(cleaned) >= 5:
                 break
-        
+
         return jsonify(cleaned)
     except Exception as e:
         return jsonify({"error": f"Could not fetch news for '{symbol}': {str(e)}"}), 500

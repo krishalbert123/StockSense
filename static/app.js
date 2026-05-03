@@ -696,7 +696,14 @@ function chartOptions(containerId, height) {
 /* ── UTILS ─────────────────────────────────────────────── */
 function show(id) { const el = document.getElementById(id); if (el) el.classList.remove("hidden"); }
 function hide(id) { const el = document.getElementById(id); if (el) el.classList.add("hidden"); }
-function setStatus(el, msg, ok) { el.textContent = msg; el.className = "form-status " + (ok ? "ok" : "err"); }
+function setStatus(el, msg, ok) {
+    el.textContent = msg;
+    if (msg && msg.trim()) {
+        el.className = "form-status show " + (ok ? "ok" : "err");
+    } else {
+        el.className = "form-status";
+    }
+}
 function toast(msg, ok) {
     const t = document.getElementById("toast");
     t.textContent = msg;

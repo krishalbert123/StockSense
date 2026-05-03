@@ -543,26 +543,26 @@ body {
 }
 
 .form-status {
+    display: none;
+    margin-top: 14px;
+    font-size: 12px;
+    min-height: 20px;
+}
+
+.form-status.show {
+    display: block;
     padding: 12px 14px;
     border-radius: 8px;
     background: rgba(255, 68, 85, 0.08);
-    color: var(--red);
-    font-size: 13px;
     line-height: 1.5;
 }
 
-.form-status {
-    margin-top: 14px;
-    font-size: 12px;
-    min-height: 20px
-}
-
 .form-status.ok {
-    color: var(--green)
+    color: var(--green);
 }
 
 .form-status.err {
-    color: var(--red)
+    color: var(--red);
 }
 
 /* ── CONTROL BAR ─────────────────────────────────────────── */
