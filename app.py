@@ -4,6 +4,7 @@ from flask_login import LoginManager, UserMixin, login_user, login_required, log
 from werkzeug.security import generate_password_hash, check_password_hash
 import psycopg2
 import psycopg2.extras
+import sqlite3
 import os
 import json
 import requests
@@ -29,7 +30,8 @@ class User(UserMixin):
 
 
 DATABASE_URL = os.environ.get("DATABASE_URL")
-
+SQLITE_DB_PATH = os.environ.get("SQLITE_DB_PATH", os.path.join(os.path.dirname(__file__), "stock_sense.db"))
+USE_SQLITE = DATABASE_URL is None
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-secret-key")
@@ -48,8 +50,14 @@ login_manager.login_view = "login"
 @login_manager.user_loader
 def load_user(user_id):
     conn = get_db()
-    cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-    cur.execute("SELECT id, username FROM users WHERE id = %s", (user_id,))
+    if USE_SQLITE:
+        cur = conn.cursor()
+    else:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    query = "SELECT id, username FROM users WHERE id = %s"
+    if USE_SQLITE:
+        query = query.replace("%s", "?")
+    cur.execute(query, (user_id,))
     row = cur.fetchone()
     conn.close()
     if row:
@@ -58,14 +66,22 @@ def load_user(user_id):
 
 
 def get_db():
-    if not DATABASE_URL:
-        raise Exception("DATABASE_URL not set in environment.")
-    return psycopg2.connect(DATABASE_URL, sslmode="require")
+    if not USE_SQLITE:
+        return psycopg2.connect(DATABASE_URL, sslmode="require")
+    conn = sqlite3.connect(SQLITE_DB_PATH, timeout=30)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    return conn
 
 
 def db_fetchall(query, params=()):
     conn = get_db()
-    cur  = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+    if USE_SQLITE:
+        cur = conn.cursor()
+        query = query.replace("%s", "?")
+        query = query.replace("ILIKE", "LIKE")
+    else:
+        cur = conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
     cur.execute(query, params)
     rows = cur.fetchall()
     conn.close()
@@ -74,7 +90,12 @@ def db_fetchall(query, params=()):
 
 def db_execute(query, params=()):
     conn = get_db()
-    cur  = conn.cursor()
+    cur = conn.cursor()
+    if USE_SQLITE:
+        if "ON CONFLICT (symbol) DO NOTHING" in query:
+            query = query.replace("INSERT INTO companies(symbol, name) VALUES(%s, %s) ON CONFLICT (symbol) DO NOTHING",
+                                  "INSERT OR IGNORE INTO companies(symbol, name) VALUES(?, ?)")
+        query = query.replace("%s", "?")
     cur.execute(query, params)
     conn.commit()
     conn.close()
@@ -83,26 +104,48 @@ def db_execute(query, params=()):
 def init_db():
     conn = get_db()
     cur  = conn.cursor()
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id SERIAL PRIMARY KEY,
-            username TEXT UNIQUE NOT NULL,
-            password_hash TEXT NOT NULL
-        )
-    """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS companies (
-            symbol TEXT PRIMARY KEY,
-            name   TEXT
-        )
-    """)
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS user_watchlist (
-            user_id INTEGER REFERENCES users(id),
-            symbol TEXT REFERENCES companies(symbol),
-            PRIMARY KEY (user_id, symbol)
-        )
-    """)
+    if USE_SQLITE:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS companies (
+                symbol TEXT PRIMARY KEY,
+                name   TEXT
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS user_watchlist (
+                user_id INTEGER,
+                symbol TEXT,
+                PRIMARY KEY (user_id, symbol)
+            )
+        """)
+    else:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                username TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS companies (
+                symbol TEXT PRIMARY KEY,
+                name   TEXT
+            )
+        """)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS user_watchlist (
+                user_id INTEGER REFERENCES users(id),
+                symbol TEXT REFERENCES companies(symbol),
+                PRIMARY KEY (user_id, symbol)
+            )
+        """)
     conn.commit()
     conn.close()
 
