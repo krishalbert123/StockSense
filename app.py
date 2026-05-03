@@ -6,6 +6,7 @@ import psycopg2
 import psycopg2.extras
 import os
 import json
+import requests
 import numpy as np
 import yfinance as yf
 import pandas as pd
@@ -410,23 +411,59 @@ def get_stocks():
 @login_required
 def search_stocks():
     """
-    Search all available stocks by symbol or name.
-    Returns stocks that match the query from database.
+    Search all available stocks by symbol or name using Yahoo Finance search.
     """
-    query = request.args.get("q", "").upper().strip()
-    
+    query = request.args.get("q", "").strip()
     if not query or len(query) < 1:
         return jsonify({"error": "Search query must be at least 1 character."}), 400
-    
-    # Search in database first (much faster)
-    rows = db_fetchall("""
-        SELECT symbol, name FROM companies 
-        WHERE symbol ILIKE %s OR name ILIKE %s
-        LIMIT 50
-    """, (f"%{query}%", f"%{query}%"))
-    
-    results = [{"symbol": r["symbol"], "name": r["name"]} for r in rows]
-    return jsonify(results)
+
+    yahoo_url = "https://query2.finance.yahoo.com/v1/finance/search"
+    params = {
+        "q": query,
+        "quotesCount": 50,
+        "newsCount": 0,
+        "enableFuzzyQuery": True,
+    }
+    try:
+        res = requests.get(yahoo_url, params=params, timeout=8, headers={
+            "User-Agent": "Mozilla/5.0 (compatible; StockSense/1.0; +https://finance.yahoo.com)"
+        })
+        res.raise_for_status()
+        data = res.json()
+        quotes = data.get("quotes", []) or []
+        results = []
+        seen = set()
+        for item in quotes:
+            symbol = item.get("symbol")
+            name = item.get("longname") or item.get("shortname") or item.get("name") or symbol
+            if not symbol or symbol in seen:
+                continue
+            seen.add(symbol)
+            results.append({"symbol": symbol, "name": name})
+            if len(results) >= 50:
+                break
+
+        if not results:
+            # Fallback to DB search if Yahoo returns no results
+            rows = db_fetchall("""
+                SELECT symbol, name FROM companies
+                WHERE symbol ILIKE %s OR name ILIKE %s
+                LIMIT 50
+            """, (f"%{query}%", f"%{query}%"))
+            results = [{"symbol": r["symbol"], "name": r["name"]} for r in rows]
+
+        return jsonify(results)
+    except Exception as e:
+        # If Yahoo search fails, fall back to local company table
+        rows = db_fetchall("""
+            SELECT symbol, name FROM companies
+            WHERE symbol ILIKE %s OR name ILIKE %s
+            LIMIT 50
+        """, (f"%{query}%", f"%{query}%"))
+        results = [{"symbol": r["symbol"], "name": r["name"]} for r in rows]
+        if results:
+            return jsonify(results)
+        return jsonify({"error": f"Search failed: {str(e)}"}), 500
 
 
 @app.route("/api/popular-stocks", methods=["GET"])

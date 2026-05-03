@@ -488,6 +488,69 @@ body {
     display: block
 }
 
+/* ── LOGIN / REGISTER PAGE ───────────────────────────────── */
+.login-container {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 30px;
+}
+
+.login-card {
+    width: min(440px, 100%);
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 36px 34px;
+    box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+}
+
+.login-header {
+    text-align: center;
+    margin-bottom: 28px;
+}
+
+.login-header h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 28px;
+    font-weight: 800;
+    margin: 16px 0 8px;
+}
+
+.login-header p {
+    color: var(--muted);
+    font-size: 13px;
+    line-height: 1.6;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.login-footer {
+    margin-top: 24px;
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.login-footer a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.form-status {
+    padding: 12px 14px;
+    border-radius: 8px;
+    background: rgba(255, 68, 85, 0.08);
+    color: var(--red);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
 .form-status {
     margin-top: 14px;
     font-size: 12px;
