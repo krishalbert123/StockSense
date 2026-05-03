@@ -777,14 +777,15 @@ def get_news(symbol):
         for n in raw_news[:30]:
             if "content" in n:
                 c       = n["content"]
-                title   = c.get("title", "")
-                link    = c.get("clickThroughUrl", {}).get("url", "")
-                summary = c.get("summary", "")
+                title   = c.get("title") or ""
+                click_url = c.get("clickThroughUrl") or {}
+                link    = click_url.get("url", "")
+                summary = c.get("summary") or ""
                 pub     = c.get("pubDate", "")
             else:
-                title   = n.get("title", "")
-                link    = n.get("link", "")
-                summary = n.get("summary", "")
+                title   = n.get("title") or ""
+                link    = n.get("link", "") or ""
+                summary = n.get("summary") or ""
                 pub     = n.get("providerPublishTime", "")
 
             full_text = (title + " " + summary).lower()
